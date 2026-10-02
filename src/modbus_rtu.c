@@ -4,13 +4,32 @@
 #include <string.h>
 
 /* Function codes. */
-#define FC_READ_HOLDING   0x03u
-#define FC_READ_INPUT     0x04u
-#define FC_WRITE_SINGLE   0x06u
-#define FC_WRITE_MULTIPLE 0x10u
+#define FC_READ_COILS         0x01u
+#define FC_READ_HOLDING       0x03u
+#define FC_READ_INPUT         0x04u
+#define FC_WRITE_SINGLE_COIL  0x05u
+#define FC_WRITE_SINGLE       0x06u
+#define FC_WRITE_MULTIPLE_COILS 0x0Fu
+#define FC_WRITE_MULTIPLE     0x10u
 
 #define MAX_READ_QTY   125u
 #define MAX_WRITE_QTY  123u
+#define MAX_READ_COILS   2000u
+#define MAX_WRITE_COILS  1968u
+
+/* Coils are bit-packed LSB-first: coil N = bit (N % 8) of byte (N / 8). */
+static bool coil_get(const uint8_t *bank, size_t idx)
+{
+    return ((bank[idx / 8u] >> (idx % 8u)) & 1u) != 0;
+}
+
+static void coil_set(uint8_t *bank, size_t idx, bool on)
+{
+    if (on)
+        bank[idx / 8u] |= (uint8_t)(1u << (idx % 8u));
+    else
+        bank[idx / 8u] &= (uint8_t)~(1u << (idx % 8u));
+}
 
 uint16_t modbus_crc16(const uint8_t *data, size_t len)
 {
@@ -98,6 +117,41 @@ size_t modbus_process_frame(modbus_slave_t *s,
     broadcast = (addr == MODBUS_BROADCAST_ADDR);
 
     switch (func) {
+    case FC_READ_COILS: {
+        uint16_t start, qty;
+        uint8_t byte_count;
+        size_t rlen, i;
+
+        if (broadcast)
+            return 0; /* reads are never broadcast */
+        if (req_len != 8)
+            return 0; /* malformed: ignore */
+        start = (uint16_t)((req[2] << 8) | req[3]);
+        qty = (uint16_t)((req[4] << 8) | req[5]);
+        if (qty < 1 || qty > MAX_READ_COILS)
+            return build_exception(addr, func, MODBUS_EX_ILLEGAL_VALUE,
+                                   resp, resp_cap);
+        if (!s->map.coils || !in_range(start, qty, s->map.n_coils))
+            return build_exception(addr, func, MODBUS_EX_ILLEGAL_ADDRESS,
+                                   resp, resp_cap);
+
+        byte_count = (uint8_t)((qty + 7u) / 8u);
+        rlen = 3 + byte_count + 2;
+        if (rlen > resp_cap)
+            return 0;
+        resp[0] = addr;
+        resp[1] = func;
+        resp[2] = byte_count;
+        memset(&resp[3], 0, byte_count);
+        for (i = 0; i < qty; i++)
+            if (coil_get(s->map.coils, (size_t)start + i))
+                resp[3 + i / 8u] |= (uint8_t)(1u << (i % 8u));
+        crc_calc = modbus_crc16(resp, rlen - 2);
+        resp[rlen - 2] = (uint8_t)(crc_calc & 0xFFu);
+        resp[rlen - 1] = (uint8_t)(crc_calc >> 8);
+        return rlen;
+    }
+
     case FC_READ_HOLDING:
     case FC_READ_INPUT: {
         const uint16_t *bank;
@@ -141,6 +195,39 @@ size_t modbus_process_frame(modbus_slave_t *s,
         return rlen;
     }
 
+    case FC_WRITE_SINGLE_COIL: {
+        uint16_t coil, val;
+
+        if (req_len != 8)
+            return 0;
+        coil = (uint16_t)((req[2] << 8) | req[3]);
+        val = (uint16_t)((req[4] << 8) | req[5]);
+        /* Only 0xFF00 (ON) and 0x0000 (OFF) are legal coil values. */
+        if (val != 0xFF00u && val != 0x0000u) {
+            if (broadcast)
+                return 0;
+            return build_exception(addr, func, MODBUS_EX_ILLEGAL_VALUE,
+                                   resp, resp_cap);
+        }
+        if (!s->map.coils || !in_range(coil, 1, s->map.n_coils)) {
+            if (broadcast)
+                return 0;
+            return build_exception(addr, func, MODBUS_EX_ILLEGAL_ADDRESS,
+                                   resp, resp_cap);
+        }
+        coil_set(s->map.coils, coil, val == 0xFF00u);
+        if (broadcast)
+            return 0; /* applied, never answered */
+        /* Normal response echoes the request. */
+        if (resp_cap < 8)
+            return 0;
+        memcpy(resp, req, 6);
+        crc_calc = modbus_crc16(resp, 6);
+        resp[6] = (uint8_t)(crc_calc & 0xFFu);
+        resp[7] = (uint8_t)(crc_calc >> 8);
+        return 8;
+    }
+
     case FC_WRITE_SINGLE: {
         uint16_t reg, val;
 
@@ -165,6 +252,51 @@ size_t modbus_process_frame(modbus_slave_t *s,
         resp[6] = (uint8_t)(crc_calc & 0xFFu);
         resp[7] = (uint8_t)(crc_calc >> 8);
         return 8;
+    }
+
+    case FC_WRITE_MULTIPLE_COILS: {
+        uint16_t start, qty;
+        uint8_t byte_count, expect;
+        size_t rlen, i;
+
+        if (req_len < 9)
+            return 0;
+        start = (uint16_t)((req[2] << 8) | req[3]);
+        qty = (uint16_t)((req[4] << 8) | req[5]);
+        byte_count = req[6];
+        expect = (uint8_t)((qty + 7u) / 8u);
+        if (qty < 1 || qty > MAX_WRITE_COILS || byte_count != expect ||
+            req_len != (size_t)7 + byte_count + 2) {
+            if (broadcast)
+                return 0;
+            return build_exception(addr, func, MODBUS_EX_ILLEGAL_VALUE,
+                                   resp, resp_cap);
+        }
+        if (!s->map.coils || !in_range(start, qty, s->map.n_coils)) {
+            if (broadcast)
+                return 0;
+            return build_exception(addr, func, MODBUS_EX_ILLEGAL_ADDRESS,
+                                   resp, resp_cap);
+        }
+        for (i = 0; i < qty; i++) {
+            bool on = ((req[7 + i / 8u] >> (i % 8u)) & 1u) != 0;
+            coil_set(s->map.coils, (size_t)start + i, on);
+        }
+        if (broadcast)
+            return 0;
+        if (resp_cap < 8)
+            return 0;
+        resp[0] = addr;
+        resp[1] = func;
+        resp[2] = req[2];
+        resp[3] = req[3];
+        resp[4] = req[4];
+        resp[5] = req[5];
+        crc_calc = modbus_crc16(resp, 6);
+        resp[6] = (uint8_t)(crc_calc & 0xFFu);
+        resp[7] = (uint8_t)(crc_calc >> 8);
+        rlen = 8;
+        return rlen;
     }
 
     case FC_WRITE_MULTIPLE: {

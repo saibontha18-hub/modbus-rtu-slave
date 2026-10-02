@@ -12,10 +12,13 @@
  *   [slave addr][function][data ...][CRC lo][CRC hi]
  *
  * Supported function codes:
- *   0x03  Read Holding Registers      (up to 125 registers)
- *   0x04  Read Input Registers        (up to 125 registers)
+ *   0x01  Read Coils                    (up to 2000 coils)
+ *   0x03  Read Holding Registers        (up to 125 registers)
+ *   0x04  Read Input Registers          (up to 125 registers)
+ *   0x05  Write Single Coil             (0xFF00 = ON, 0x0000 = OFF)
  *   0x06  Write Single Register
- *   0x10  Write Multiple Registers    (up to 123 registers)
+ *   0x0F  Write Multiple Coils          (up to 1968 coils)
+ *   0x10  Write Multiple Registers      (up to 123 registers)
  *
  * Anything else gets exception 0x01 (illegal function); out-of-range
  * accesses get 0x02 (illegal data address); bad quantities get 0x03
@@ -36,12 +39,15 @@
 #define MODBUS_EX_ILLEGAL_ADDRESS  0x02u
 #define MODBUS_EX_ILLEGAL_VALUE    0x03u
 
-/* Register image backing the slave. */
+/* Register/coil image backing the slave. Coils are bit-packed LSB-first:
+ * coil N lives in bit (N % 8) of byte (N / 8), per the Modbus spec. */
 typedef struct {
     uint16_t *holding;
     size_t n_holding;
     uint16_t *input;
     size_t n_input;
+    uint8_t *coils;
+    size_t n_coils;
 } modbus_map_t;
 
 typedef struct {
