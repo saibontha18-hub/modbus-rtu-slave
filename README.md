@@ -8,8 +8,15 @@ exception responses.
 
 ## Features
 
-- **Function codes:** `0x03` Read Holding Registers, `0x04` Read Input
-  Registers, `0x06` Write Single Register, `0x10` Write Multiple Registers
+- **Function codes:** `0x01` Read Coils, `0x03` Read Holding Registers,
+  `0x04` Read Input Registers, `0x05` Write Single Coil,
+  `0x06` Write Single Register, `0x0F` Write Multiple Coils,
+  `0x10` Write Multiple Registers
+- **Coil bank:** bit-packed LSB-first per the Modbus spec, with the same
+  range/exception discipline as the register banks
+- **Master helpers** (`src/modbus_master.*`): request builders for all
+  supported function codes — construct valid CRC'd request frames for
+  integration use; invalid arguments safely produce no frame
 - **Exceptions:** `0x01` illegal function, `0x02` illegal data address,
   `0x03` illegal data value
 - **Spec-correct silence rules:** corrupted frames, wrong-slave frames, and
@@ -25,16 +32,18 @@ exception responses.
 hal/        UART abstraction (hal_uart.h) + software mock (mock_uart.*)
             The mock replays scripted RX bytes, captures TX, and provides a
             controllable millisecond clock for the silence detection.
-src/        The stack: modbus_rtu.h / modbus_rtu.c
+src/        The stack: modbus_rtu.h / modbus_rtu.c (slave),
+            modbus_master.h / modbus_master.c (request builders)
 app/        Demo: wires the slave to the mock UART and runs a scripted
-            master session (read regs -> write reg -> read back).
-tests/      Self-contained test suite (16 tests, no external framework).
+            master session (read regs -> write reg -> read back ->
+            write coil -> read coils).
+tests/      Self-contained test suite (30 tests, no external framework).
 ```
 
 ## Build & test
 
 ```sh
-make test     # builds and runs the 16-test suite
+make test     # builds and runs the 30-test suite
 make demo && ./demo
 ```
 
@@ -52,6 +61,12 @@ TX       ( 8 bytes): 01 06 00 01 12 34 D5 7D
 --- read holding reg 1 ---
 RX       ( 8 bytes): 01 03 00 01 00 01 D5 CA
 TX       ( 7 bytes): 01 03 02 12 34 B5 33
+--- write single coil 5 = ON ---
+RX       ( 8 bytes): 01 05 00 05 FF 00 9C 3B
+TX       ( 8 bytes): 01 05 00 05 FF 00 9C 3B
+--- read coils 0..9 ---
+RX       ( 8 bytes): 01 01 00 00 00 0A BC 0D
+TX       ( 7 bytes): 01 01 02 20 00 A0 3C
 ```
 
 ## Porting to real hardware

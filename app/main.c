@@ -19,6 +19,7 @@
 /* Demo register image: holding[0] = temperature in 0.01 degC, etc. */
 static uint16_t holding[16];
 static uint16_t input_regs[16];
+static uint8_t coils[4]; /* 32 coils, bit-packed LSB-first */
 
 /* Build a request frame (addr, func, payload) + CRC into `out`. */
 static size_t make_req(uint8_t addr, uint8_t func,
@@ -112,6 +113,8 @@ int main(void)
     slave.map.n_holding = 16;
     slave.map.input = input_regs;
     slave.map.n_input = 16;
+    slave.map.coils = coils;
+    slave.map.n_coils = 32;
 
     /* Script: 1) read 2 holding regs, 2) write one reg, 3) read it back. */
     printf("--- read holding regs 0..1 ---\n");
@@ -132,7 +135,20 @@ int main(void)
         script_frame(&muart, SLAVE_ADDR, 0x03, p, sizeof(p));
         run_cycle(uart, &muart, &slave, &rx);
     }
+    printf("--- write single coil 5 = ON ---\n");
+    {
+        uint8_t p[] = { 0x00, 0x05, 0xFF, 0x00 };
+        script_frame(&muart, SLAVE_ADDR, 0x05, p, sizeof(p));
+        run_cycle(uart, &muart, &slave, &rx);
+    }
+    printf("--- read coils 0..9 ---\n");
+    {
+        uint8_t p[] = { 0x00, 0x00, 0x00, 0x0A };
+        script_frame(&muart, SLAVE_ADDR, 0x01, p, sizeof(p));
+        run_cycle(uart, &muart, &slave, &rx);
+    }
 
-    printf("demo done: holding[1] = 0x%04X\n", holding[1]);
+    printf("demo done: holding[1] = 0x%04X, coil 5 = %s\n",
+           holding[1], (coils[0] & 0x20u) ? "ON" : "OFF");
     return 0;
 }
