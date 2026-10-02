@@ -1,43 +1,37 @@
-# Modbus RTU Slave
+# modbus-rtu-slave
 
-A Modbus RTU slave protocol stack in C99 — no dynamic allocation, no libc I/O
-in the stack itself. It handles the serial line protocol that lets a
-microcontroller act as a sensor/actuator node on an industrial RS-485 bus:
-frame validation, CRC-16, register read/write commands, and proper Modbus
-exception responses.
+Modbus RTU slave stack in C. No malloc, no libc I/O in the stack itself —
+I wrote it to learn the protocol properly. It parses frames, checks the
+CRC-16, handles register and coil reads/writes, and answers with the right
+exception when the master asks for something it shouldn't.
 
-## Features
+Supports 0x01/0x03/0x04 (reads), 0x05/0x06 (single writes), 0x0F/0x10
+(block writes). Bad CRC or wrong address gets silence; broadcast writes
+apply without a reply. That's what the spec says to do, so that's what it
+does.
 
-- **Function codes:** `0x01` Read Coils, `0x03` Read Holding Registers,
-  `0x04` Read Input Registers, `0x05` Write Single Coil,
-  `0x06` Write Single Register, `0x0F` Write Multiple Coils,
-  `0x10` Write Multiple Registers
-- **Coil bank:** bit-packed LSB-first per the Modbus spec, with the same
-  range/exception discipline as the register banks
-- **Master helpers** (`src/modbus_master.*`): request builders for all
-  supported function codes — construct valid CRC'd request frames for
-  integration use; invalid arguments safely produce no frame
-- **Exceptions:** `0x01` illegal function, `0x02` illegal data address,
-  `0x03` illegal data value
-- **Spec-correct silence rules:** corrupted frames, wrong-slave frames, and
-  broadcast reads get no response; broadcast writes apply silently
-- **RTU framing:** silence-delimited receiver (`modbus_rx_t`) using an
-  injectable millisecond clock — no hardware timers needed for tests
-- **Hardware abstraction:** all UART access goes through `hal_uart_t`, so the
-  same stack runs on a real target and on the host
+There's also a set of master-side request builders (`src/modbus_master.*`)
+for whipping up valid frames in tests or integration code, and a fake UART
+(`hal/mock_uart.*`) so the whole thing runs and tests on a normal PC —
+no hardware needed.
+
+## What's in here
+
+- **Function codes:** 0x01 read coils, 0x03/0x04 read registers,
+  0x05/0x06 write single coil/register, 0x0F/0x10 write multiple
+- **Coils** bit-packed LSB-first, same range/exception discipline as registers
+- **Exceptions** 0x01 (bad function), 0x02 (bad address), 0x03 (bad value)
+- **RTU framing** via line silence (`modbus_rx_t`) with an injectable ms
+  clock — no hardware timers needed for tests
+- **UART abstraction** (`hal_uart_t`) so the same code runs on target and host
 
 ## Layout
 
 ```
-hal/        UART abstraction (hal_uart.h) + software mock (mock_uart.*)
-            The mock replays scripted RX bytes, captures TX, and provides a
-            controllable millisecond clock for the silence detection.
-src/        The stack: modbus_rtu.h / modbus_rtu.c (slave),
-            modbus_master.h / modbus_master.c (request builders)
-app/        Demo: wires the slave to the mock UART and runs a scripted
-            master session (read regs -> write reg -> read back ->
-            write coil -> read coils).
-tests/      Self-contained test suite (30 tests, no external framework).
+hal/        UART abstraction + fake UART (scripted RX, captured TX, fake clock)
+src/        the stack: modbus_rtu.* (slave), modbus_master.* (request builders)
+app/        demo: slave on the fake UART, scripted master session
+tests/      self-contained suite, 30 tests, no external framework
 ```
 
 ## Build & test
@@ -47,7 +41,7 @@ make test     # builds and runs the 30-test suite
 make demo && ./demo
 ```
 
-Everything compiles under `gcc -Wall -Wextra -Werror -std=c11 -pedantic`.
+Compiles clean under `gcc -Wall -Wextra -Werror -std=c11 -pedantic`.
 
 ## Demo output
 
@@ -71,12 +65,9 @@ TX       ( 7 bytes): 01 01 02 20 00 A0 3C
 
 ## Porting to real hardware
 
-1. Implement `hal_uart_t` with your UART peripheral (blocking read with
-   timeout, write, and a millisecond tick — `SysTick` or a hardware timer).
-2. Compute the 3.5-character silence for your baud rate
-   (e.g. ~4 ms at 9600 baud, ~1.75 ms at 19200) and pass it as
-   `frame_gap_ms` to `modbus_rx_ready()`.
-3. Point `modbus_map_t` at your real register image and call
-   `modbus_process_frame()` for each delimited frame.
-
-Tested on Linux with the mock UART; the stack itself is platform-agnostic.
+1. Implement `hal_uart_t` against your UART (blocking read with timeout,
+   write, and a ms tick — SysTick or a timer).
+2. Use the 3.5-char silence for your baud rate as `frame_gap_ms`
+   (~4 ms at 9600, ~1.75 ms at 19200).
+3. Point `modbus_map_t` at your real registers/coils and call
+   `modbus_process_frame()` on each delimited frame.
