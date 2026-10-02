@@ -6,16 +6,14 @@
 #include <stdint.h>
 
 /*
- * Master-side request builders: construct valid Modbus RTU request frames
- * (slave address + function + payload + CRC-16) for use by a master
- * implementation, test harnesses, or integration scripts.
+ * Master-side request builders: slave addr + function + payload + CRC.
+ * Handy for test harnesses or a real master.
  *
- * Each builder writes the complete frame into `out` (capacity `cap`) and
- * returns the frame length. It returns 0 when any argument is out of spec
- * (bad quantity, coil index, NULL pointer) or when `cap` is too small —
- * so a zero return always means "no valid frame was produced".
+ * Each writes the full frame into `out` and returns its length, or 0 when
+ * anything is out of spec (bad quantity, NULL pointer, cap too small) —
+ * so 0 always means "no frame produced".
  *
- * Quantity limits follow the Modbus specification:
+ * Quantity limits per the spec:
  *   reads:  1..2000 coils, 1..125 registers
  *   writes: 1..1968 coils, 1..123 registers
  */

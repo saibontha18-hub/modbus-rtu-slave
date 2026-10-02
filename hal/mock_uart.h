@@ -8,10 +8,9 @@
 #include "hal_uart.h"
 
 /*
- * Software mock of a UART: test code feeds bytes into the RX fifo,
- * advances a fake millisecond clock, and inspects everything the
- * application wrote to TX. A `fail_read` flag simulates a UART
- * peripheral error for testing error paths.
+ * Fake UART for tests: script RX bytes, advance a fake ms clock, inspect
+ * what got written to TX. fail_read simulates a peripheral error so the
+ * error paths get exercised too.
  */
 
 #define MOCK_UART_BUF 1024

@@ -1,12 +1,6 @@
 /*
- * Demo: wire the Modbus RTU slave to the mock UART and run a scripted
- * master session through it.
- *
- * The "master" here is just a few pre-built request frames fed into the
- * RX fifo. The app polls the UART, delimits frames with the RTU silence
- * rule (3.5 chars — here a fake 5 ms gap), processes each frame, and
- * writes the response back. Everything the slave transmits is hex-dumped
- * at the end.
+ * Demo: slave on a fake UART, scripted master session.
+ * Polls for bytes, frames them by line silence, answers, hex-dumps it all.
  */
 #include <stdio.h>
 
@@ -21,7 +15,7 @@ static uint16_t holding[16];
 static uint16_t input_regs[16];
 static uint8_t coils[4]; /* 32 coils, bit-packed LSB-first */
 
-/* Build a request frame (addr, func, payload) + CRC into `out`. */
+/* frame builder: addr + func + payload + CRC into out */
 static size_t make_req(uint8_t addr, uint8_t func,
                        const uint8_t *payload, size_t payload_len,
                        uint8_t *out)
@@ -44,8 +38,7 @@ static void hexdump(const char *tag, const uint8_t *p, size_t n)
     printf("\n");
 }
 
-/* Feed one frame byte-by-byte with 1 ms spacing (like a real UART),
-   then leave the line silent long enough to delimit the frame. */
+/* one frame, byte by byte with 1 ms gaps, then silence to delimit it */
 static void script_frame(mock_uart_t *muart, uint8_t addr, uint8_t func,
                          const uint8_t *payload, size_t payload_len)
 {
@@ -58,7 +51,7 @@ static void script_frame(mock_uart_t *muart, uint8_t addr, uint8_t func,
     mock_uart_advance_ms(muart, FRAME_GAP_MS + 1);
 }
 
-/* Run the poll loop until the scripted bytes are drained and answered. */
+/* poll until the scripted bytes are drained and answered */
 static void run_cycle(const hal_uart_t *uart, mock_uart_t *muart,
                       modbus_slave_t *slave, modbus_rx_t *rx)
 {
@@ -116,7 +109,7 @@ int main(void)
     slave.map.coils = coils;
     slave.map.n_coils = 32;
 
-    /* Script: 1) read 2 holding regs, 2) write one reg, 3) read it back. */
+    /* read regs -> write a reg -> read it back -> coil write -> coil read */
     printf("--- read holding regs 0..1 ---\n");
     {
         uint8_t p[] = { 0x00, 0x00, 0x00, 0x02 };

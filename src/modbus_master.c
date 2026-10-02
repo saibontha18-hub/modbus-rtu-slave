@@ -2,13 +2,13 @@
 
 #include "modbus_rtu.h"
 
-/* Spec quantity limits (shared with the slave's validation). */
+/* Spec quantity limits. */
 #define M_MAX_READ_REGS   125u
 #define M_MAX_WRITE_REGS  123u
 #define M_MAX_READ_COILS  2000u
 #define M_MAX_WRITE_COILS 1968u
 
-/* Append the CRC-16 to a frame of `len` payload bytes; return total length. */
+/* CRC on the end, return the full length. */
 static size_t finish(uint8_t *out, size_t len)
 {
     uint16_t crc = modbus_crc16(out, len);

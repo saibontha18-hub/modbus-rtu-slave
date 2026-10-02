@@ -3,7 +3,6 @@
 #include <errno.h>
 #include <string.h>
 
-/* Function codes. */
 #define FC_READ_COILS         0x01u
 #define FC_READ_HOLDING       0x03u
 #define FC_READ_INPUT         0x04u
@@ -17,7 +16,6 @@
 #define MAX_READ_COILS   2000u
 #define MAX_WRITE_COILS  1968u
 
-/* Coils are bit-packed LSB-first: coil N = bit (N % 8) of byte (N / 8). */
 static bool coil_get(const uint8_t *bank, size_t idx)
 {
     return ((bank[idx / 8u] >> (idx % 8u)) & 1u) != 0;
@@ -92,7 +90,6 @@ static bool in_range(uint16_t start, uint16_t qty, size_t n)
     return (size_t)start + (size_t)qty <= n;
 }
 
-/* Returns response length, or 0 for "no response". */
 size_t modbus_process_frame(modbus_slave_t *s,
                             const uint8_t *req, size_t req_len,
                             uint8_t *resp, size_t resp_cap)
@@ -104,7 +101,6 @@ size_t modbus_process_frame(modbus_slave_t *s,
     if (!s || !req || !resp || req_len < 4 || req_len > MODBUS_MAX_FRAME)
         return 0;
 
-    /* CRC check first: never answer a corrupted frame. */
     crc_rx = (uint16_t)req[req_len - 2] | ((uint16_t)req[req_len - 1] << 8);
     crc_calc = modbus_crc16(req, req_len - 2);
     if (crc_rx != crc_calc)
@@ -123,9 +119,9 @@ size_t modbus_process_frame(modbus_slave_t *s,
         size_t rlen, i;
 
         if (broadcast)
-            return 0; /* reads are never broadcast */
+            return 0;
         if (req_len != 8)
-            return 0; /* malformed: ignore */
+            return 0;
         start = (uint16_t)((req[2] << 8) | req[3]);
         qty = (uint16_t)((req[4] << 8) | req[5]);
         if (qty < 1 || qty > MAX_READ_COILS)
@@ -160,9 +156,9 @@ size_t modbus_process_frame(modbus_slave_t *s,
         size_t rlen;
 
         if (broadcast)
-            return 0; /* reads are never broadcast */
+            return 0;
         if (req_len != 8)
-            return 0; /* malformed: ignore */
+            return 0;
         if (func == FC_READ_HOLDING) {
             bank = s->map.holding;
             n_bank = s->map.n_holding;
@@ -202,7 +198,6 @@ size_t modbus_process_frame(modbus_slave_t *s,
             return 0;
         coil = (uint16_t)((req[2] << 8) | req[3]);
         val = (uint16_t)((req[4] << 8) | req[5]);
-        /* Only 0xFF00 (ON) and 0x0000 (OFF) are legal coil values. */
         if (val != 0xFF00u && val != 0x0000u) {
             if (broadcast)
                 return 0;
@@ -217,8 +212,7 @@ size_t modbus_process_frame(modbus_slave_t *s,
         }
         coil_set(s->map.coils, coil, val == 0xFF00u);
         if (broadcast)
-            return 0; /* applied, never answered */
-        /* Normal response echoes the request. */
+            return 0;
         if (resp_cap < 8)
             return 0;
         memcpy(resp, req, 6);
@@ -243,8 +237,7 @@ size_t modbus_process_frame(modbus_slave_t *s,
         }
         s->map.holding[reg] = val;
         if (broadcast)
-            return 0; /* applied, never answered */
-        /* Normal response echoes the request. */
+            return 0;
         if (resp_cap < 8)
             return 0;
         memcpy(resp, req, 6);

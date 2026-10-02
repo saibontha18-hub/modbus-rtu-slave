@@ -6,35 +6,23 @@
 #include <stdint.h>
 
 /*
- * Modbus RTU slave protocol stack (no dynamic allocation, no libc I/O).
+ * Modbus RTU slave stack. No malloc, no libc I/O in here.
  *
- * Frame layout on the wire:
- *   [slave addr][function][data ...][CRC lo][CRC hi]
+ * Wire layout: [addr][function][data...][CRC lo][CRC hi]
  *
- * Supported function codes:
- *   0x01  Read Coils                    (up to 2000 coils)
- *   0x03  Read Holding Registers        (up to 125 registers)
- *   0x04  Read Input Registers          (up to 125 registers)
- *   0x05  Write Single Coil             (0xFF00 = ON, 0x0000 = OFF)
- *   0x06  Write Single Register
- *   0x0F  Write Multiple Coils          (up to 1968 coils)
- *   0x10  Write Multiple Registers      (up to 123 registers)
+ * Handles 0x01/0x03/0x04 reads, 0x05/0x06 single writes, 0x0F/0x10 block
+ * writes, plus the standard exceptions (0x01 bad function, 0x02 bad address,
+ * 0x03 bad value). Bad CRC or wrong address gets silence, per the spec.
+ * Broadcast writes (addr 0) apply without a reply.
  *
- * Anything else gets exception 0x01 (illegal function); out-of-range
- * accesses get 0x02 (illegal data address); bad quantities get 0x03
- * (illegal data value). Frames with a bad CRC, or addressed to a
- * different slave, are silently ignored per the spec. Broadcast
- * writes (address 0) are applied but never answered.
- *
- * RTU framing on real hardware uses a 3.5-character silence to delimit
- * frames; modbus_rx_t implements that with an injectable millisecond
- * clock so it is unit-testable without timers.
+ * On real hardware, frames are delimited by 3.5 chars of line silence;
+ * modbus_rx_t does that with an injectable ms clock so tests don't need
+ * timers.
  */
 
 #define MODBUS_BROADCAST_ADDR 0x00u
 #define MODBUS_MAX_FRAME      256u
 
-/* Exception codes. */
 #define MODBUS_EX_ILLEGAL_FUNCTION 0x01u
 #define MODBUS_EX_ILLEGAL_ADDRESS  0x02u
 #define MODBUS_EX_ILLEGAL_VALUE    0x03u
@@ -59,10 +47,9 @@ typedef struct {
 uint16_t modbus_crc16(const uint8_t *data, size_t len);
 
 /*
- * Process one complete RTU frame (`req_len` bytes INCLUDING the 2 CRC bytes).
- * Writes the response frame into `resp` (capacity `resp_cap`) and returns
- * the response length. Returns 0 when no response is due: broadcast frame,
- * CRC mismatch, or frame for another slave. Never writes more than
+ * Handle one complete frame (req_len includes the 2 CRC bytes). Writes the
+ * reply into resp and returns its length, or 0 when no reply is owed
+ * (broadcast, bad CRC, wrong slave). Never writes more than
  * MODBUS_MAX_FRAME bytes.
  */
 size_t modbus_process_frame(modbus_slave_t *slave,
@@ -84,10 +71,9 @@ void modbus_rx_init(modbus_rx_t *rx);
 int modbus_rx_put(modbus_rx_t *rx, uint8_t byte, uint32_t now_ms);
 
 /*
- * Returns true when a complete frame is sitting in rx->buf: at least 4 bytes
- * received and the line has been silent for >= frame_gap_ms (use the
- * 3.5-character time for your baud rate on target, e.g. ~4 ms at 9600 baud).
- * Call modbus_rx_reset() after consuming the frame.
+ * True once a full frame is buffered: at least 4 bytes in, and the line
+ * quiet for >= frame_gap_ms (use the 3.5-char time for your baud rate,
+ * e.g. ~4 ms at 9600). Reset after consuming the frame.
  */
 bool modbus_rx_ready(const modbus_rx_t *rx, uint32_t now_ms,
                      uint32_t frame_gap_ms);

@@ -5,20 +5,16 @@
 #include <stdint.h>
 
 /*
- * Minimal UART hardware-abstraction layer (byte stream + millisecond clock).
+ * Tiny UART abstraction: byte stream + ms clock.
  *
- * The protocol stack never touches hardware directly. On a real target,
- * implement these with your UART peripheral (blocking or DMA-backed);
- * on the host, use mock_uart, which replays scripted RX bytes, captures
- * TX bytes, and provides a controllable clock for testing the RTU
- * inter-frame silence detection.
+ * The stack never touches hardware directly. Implement these against your
+ * UART peripheral on target; on the host, mock_uart replays scripted RX,
+ * captures TX, and fakes the clock for the RTU silence detection.
  */
 
 typedef struct {
-    /*
-     * Read up to `cap` bytes, waiting at most `timeout_ms`.
-     * Returns bytes read (0 = timeout), negative errno-style on error.
-     */
+    /* Read up to cap bytes, waiting at most timeout_ms.
+       Returns bytes read (0 = timeout), negative on error. */
     int (*read)(void *ctx, uint8_t *buf, size_t cap, uint32_t timeout_ms);
     /* Write `len` bytes. Returns 0 on success, negative on error. */
     int (*write)(void *ctx, const uint8_t *buf, size_t len);

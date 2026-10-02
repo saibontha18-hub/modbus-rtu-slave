@@ -21,7 +21,7 @@ static int passes, failures;
         else { failures++; printf("FAIL\n"); } \
     } while (0)
 
-/* Build a frame: addr, func, payload, CRC. Returns total length. */
+/* test helper: frame builder */
 static size_t frame(uint8_t addr, uint8_t func,
                     const uint8_t *p, size_t pn,
                     uint8_t *out)
