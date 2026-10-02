@@ -2,7 +2,7 @@ CC      ?= gcc
 CFLAGS  ?= -Wall -Wextra -Werror -std=c11 -pedantic
 INCLUDES = -Ihal -Isrc
 
-SRCS = hal/mock_uart.c src/modbus_rtu.c
+SRCS = hal/mock_uart.c src/modbus_rtu.c src/modbus_master.c
 OBJS = $(SRCS:.c=.o)
 
 .PHONY: all demo test clean
