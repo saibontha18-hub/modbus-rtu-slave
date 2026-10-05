@@ -1,6 +1,6 @@
 # modbus-rtu-slave
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Language](https://img.shields.io/badge/language-C-blue.svg)](src/) [![Tests](https://img.shields.io/badge/tests-30%20passing-brightgreen.svg)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Language](https://img.shields.io/badge/language-C-blue.svg)](src/)
 
 Modbus RTU slave stack in C. No malloc, no libc I/O in the stack itself —
 I wrote it to learn the protocol properly. It parses frames, checks the
