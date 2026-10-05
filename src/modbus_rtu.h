@@ -62,7 +62,7 @@ typedef struct {
     uint8_t buf[MODBUS_MAX_FRAME];
     size_t len;
     uint32_t last_ms;
-    bool overflow; /* set when bytes arrived faster than we could frame them */
+    bool overflow; /* sticky: frame buffer filled up and a byte was dropped */
 } modbus_rx_t;
 
 void modbus_rx_init(modbus_rx_t *rx);

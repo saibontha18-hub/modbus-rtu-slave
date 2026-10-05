@@ -70,6 +70,7 @@ TX       ( 7 bytes): 01 01 02 20 00 A0 3C
 1. Implement `hal_uart_t` against your UART (blocking read with timeout,
    write, and a ms tick — SysTick or a timer).
 2. Use the 3.5-char silence for your baud rate as `frame_gap_ms`
-   (~4 ms at 9600, ~1.75 ms at 19200).
+   (~4 ms at 9600, ~2 ms at 19200 — both assume 11-bit char framing:
+   3.5 chars x 11 bits / baud).
 3. Point `modbus_map_t` at your real registers/coils and call
    `modbus_process_frame()` on each delimited frame.
