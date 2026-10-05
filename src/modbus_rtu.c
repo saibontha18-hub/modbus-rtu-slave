@@ -210,10 +210,12 @@ size_t modbus_process_frame(modbus_slave_t *s,
             return build_exception(addr, func, MODBUS_EX_ILLEGAL_ADDRESS,
                                    resp, resp_cap);
         }
+        /* validate before mutating: a write we can't acknowledge (resp too
+           small) shouldn't half-commit into the coil map either */
+        if (!broadcast && resp_cap < 8)
+            return 0;
         coil_set(s->map.coils, coil, val == 0xFF00u);
         if (broadcast)
-            return 0;
-        if (resp_cap < 8)
             return 0;
         memcpy(resp, req, 6);
         crc_calc = modbus_crc16(resp, 6);
@@ -235,10 +237,12 @@ size_t modbus_process_frame(modbus_slave_t *s,
             return build_exception(addr, func, MODBUS_EX_ILLEGAL_ADDRESS,
                                    resp, resp_cap);
         }
+        /* validate before mutating: a write we can't acknowledge (resp too
+           small) shouldn't half-commit into the holding map either */
+        if (!broadcast && resp_cap < 8)
+            return 0;
         s->map.holding[reg] = val;
         if (broadcast)
-            return 0;
-        if (resp_cap < 8)
             return 0;
         memcpy(resp, req, 6);
         crc_calc = modbus_crc16(resp, 6);
@@ -271,16 +275,17 @@ size_t modbus_process_frame(modbus_slave_t *s,
             return build_exception(addr, func, MODBUS_EX_ILLEGAL_ADDRESS,
                                    resp, resp_cap);
         }
+        /* validate before mutating: a write we can't acknowledge (resp too
+           small) shouldn't half-commit into the coil map either */
+        if (!broadcast && resp_cap < 8)
+            return 0;
         for (i = 0; i < qty; i++) {
             bool on = ((req[7 + i / 8u] >> (i % 8u)) & 1u) != 0;
             coil_set(s->map.coils, (size_t)start + i, on);
         }
         if (broadcast)
             return 0;
-        if (resp_cap < 8)
-            return 0;
         resp[0] = addr;
-        resp[1] = func;
         resp[2] = req[2];
         resp[3] = req[3];
         resp[4] = req[4];
@@ -315,12 +320,14 @@ size_t modbus_process_frame(modbus_slave_t *s,
             return build_exception(addr, func, MODBUS_EX_ILLEGAL_ADDRESS,
                                    resp, resp_cap);
         }
+        /* validate before mutating: a write we can't acknowledge (resp too
+           small) shouldn't half-commit into the holding map either */
+        if (!broadcast && resp_cap < 8)
+            return 0;
         for (uint16_t i = 0; i < qty; i++)
             s->map.holding[start + i] =
                 (uint16_t)((req[7 + i * 2] << 8) | req[8 + i * 2]);
         if (broadcast)
-            return 0;
-        if (resp_cap < 8)
             return 0;
         resp[0] = addr;
         resp[1] = func;
