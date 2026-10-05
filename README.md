@@ -65,6 +65,13 @@ RX       ( 8 bytes): 01 01 00 00 00 0A BC 0D
 TX       ( 7 bytes): 01 01 02 20 00 A0 3C
 ```
 
+## Screenshots
+
+The demo session as it actually runs — slave on the fake UART answering a
+scripted byte-level master, same output as the transcript above.
+
+![demo run on the fake UART: register and coil reads/writes with the RX/TX frame bytes](docs/screenshots/demo.png)
+
 ## Porting to real hardware
 
 1. Implement `hal_uart_t` against your UART (blocking read with timeout,
